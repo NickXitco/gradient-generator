@@ -2,9 +2,12 @@
 
 import { Card } from "@/components/ui/card";
 import { vertexShader, fragmentShader } from "@/shaders/noise";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Clock, Color, Mesh, OrthographicCamera, PlaneGeometry, Scene, ShaderMaterial, WebGLRenderer } from "three";
 import { INITIAL_SHADER_STATE, useShaderStore } from "@/store/ShaderSlice";
+import { Play } from "lucide-react";
+import { Button } from "../ui/button";
+import { Pause } from "lucide-react";
 
 const padArray = (array: Color[], length: number) => {
     const paddedArray = new Array(length).fill(array[0]);
@@ -18,6 +21,13 @@ export const CanvasCard = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
     const materialRef = useRef<ShaderMaterial>(null);
+
+    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const isPlayingRef = useRef<boolean>(false);
+
+    useEffect(() => {
+        isPlayingRef.current = isPlaying;
+    }, [isPlaying]);
 
     // We keep this separate so that changing the value doesn't cause
     // the shader to appear to jump.
@@ -47,13 +57,14 @@ export const CanvasCard = () => {
         const fullScreenGeometry = new PlaneGeometry(2, 2);
 
         const colors = INITIAL_SHADER_STATE.colors.map((color) => new Color(color));
+        const LOOP_DURATION = 1.5;
 
         materialRef.current = new ShaderMaterial({
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
             uniforms: {
                 uTime: { value: 0 },
-                uLoopDuration: { value: 10 },
+                uLoopDuration: { value: LOOP_DURATION },
                 uColors: { value: padArray(colors, 8) },
                 uNumStops: { value: colors.length },
                 uWarpScale: { value: INITIAL_SHADER_STATE.warpScale },
@@ -77,8 +88,17 @@ export const CanvasCard = () => {
         const animate = () => {
             renderer.render(scene, camera);
             if (materialRef.current) {
-                elapsedTime += clock.getDelta() * timeScaleRef.current;
-                materialRef.current.uniforms.uTime.value = elapsedTime;
+                if (isPlayingRef.current) {
+                    elapsedTime += clock.getDelta() * timeScaleRef.current;
+                    elapsedTime = Math.min(elapsedTime, LOOP_DURATION);
+
+                    if (elapsedTime === LOOP_DURATION) {
+                        setIsPlaying(false);
+                        isPlayingRef.current = false;
+                        elapsedTime = 0;
+                    }
+                    materialRef.current.uniforms.uTime.value = elapsedTime;
+                }
             }
             animationFrameId = requestAnimationFrame(animate);
         };
@@ -118,7 +138,10 @@ export const CanvasCard = () => {
     }, [timeScale, warpScale, grainAmount, smoothing, noiseColor, noiseScale, fbmOctaves, fbmPersistence, colors]);
 
     return (
-        <Card ref={cardRef} className="p-0 overflow-hidden">
+        <Card ref={cardRef} className="p-0">
+            <Button className="absolute top-2 right-2" onClick={() => setIsPlaying(!isPlaying)}>
+                {isPlaying ? <Pause /> : <Play />}
+            </Button>
             <canvas ref={canvasRef} />
         </Card>
     );
